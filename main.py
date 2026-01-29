@@ -1,197 +1,171 @@
+# main.py
+import logging
+import sqlite3
 import os
-import random
-import string
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
-
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    ContextTypes, filters, CallbackQueryHandler
 )
 
-import db
-
-# ================== CONFIG ==================
+# Load .env
 load_dotenv()
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MAIN_ADMIN = int(os.getenv("MAIN_ADMIN"))
 
-db.init_db()
+# Logging
+logging.basicConfig(level=logging.INFO)
 
+# Database helper
+def init_db():
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    # Users table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            obuna_start TEXT,
+            obuna_end TEXT,
+            status TEXT DEFAULT 'oddiy'
+        )
+    """)
+    # Movies table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS movies (
+            code TEXT PRIMARY KEY,
+            title TEXT,
+            file_id TEXT,
+            year TEXT,
+            quality TEXT,
+            genre TEXT,
+            language TEXT
+        )
+    """)
+    # Payments table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            user_id INTEGER,
+            card TEXT,
+            name TEXT,
+            amount INTEGER,
+            chek_file TEXT,
+            status TEXT DEFAULT 'tasdiqlanmagan'
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-# ================== HELPERS ==================
-def is_admin(user_id: int) -> bool:
-    return user_id == MAIN_ADMIN
+init_db()
 
+# Helpers
+def generate_movie_code():
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM movies")
+    count = c.fetchone()[0] + 1
+    code = f"M{count:05d}"
+    conn.close()
+    return code
 
-def generate_code() -> str:
-    return "M" + "".join(random.choices(string.digits, k=5))
+def get_user_status(user_id):
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("SELECT status, obuna_end FROM users WHERE id=?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        status, obuna_end = row
+        if status == "faol" and datetime.strptime(obuna_end, "%Y-%m-%d") >= datetime.now():
+            return "faol"
+        else:
+            return "oddiy"
+    return "oddiy"
 
-
-async def check_force_sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    channel = db.get_setting("force_sub")
-    if not channel:
-        return True
-
-    try:
-        member = await context.bot.get_chat_member(channel, update.effective_user.id)
-        return member.status in ["member", "administrator", "creator"]
-    except Exception:
-        return False
-
-
-# ================== COMMANDS ==================
+# Start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    db.add_user(user.id, user.username)
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users (id, username) VALUES (?, ?)", (user.id, user.username))
+    conn.commit()
+    conn.close()
+    await update.message.reply_text("Salom! Kino botga xush kelibsiz. Oylik obuna 10 000 so'm.")
 
-    if not await check_force_sub(update, context):
-        await update.message.reply_text(
-            "❌ Botdan foydalanish uchun kanalga obuna bo‘ling."
-        )
-        return
+# Admin check
+def is_admin(user_id):
+    return user_id == MAIN_ADMIN
 
-    await update.message.reply_text(
-        "🎬 Kino botga xush kelibsiz!\n\n"
-        "Kino kodi yuboring yoki kino nomini yozing."
-    )
-
-
+# /add handler (skeleton)
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
+        await update.message.reply_text("Sizga ruxsat yo'q!")
         return
+    await update.message.reply_text("Iltimos, kino faylini yuboring (video/hujjat).")
+    # Keyingi step: fayl qabul qilish, nom, yil, sifat, janr, til → bazaga saqlash
+    # Bu yerda ConversationHandler bilan step-by-step ishlash kerak
 
-    if not update.message.reply_to_message or not update.message.reply_to_message.video:
-        await update.message.reply_text("🎥 Videoga reply qilib /add yozing")
-        return
-
-    video = update.message.reply_to_message.video
-    text = update.message.text.split(maxsplit=1)
-
-    title = text[1] if len(text) > 1 else "Nomsiz kino"
-    code = generate_code()
-
-    db.add_movie(code, title, "", video.file_id)
-
-    await update.message.reply_text(
-        f"✅ Kino qo‘shildi\n\n"
-        f"🎬 Nomi: {title}\n"
-        f"🔑 Kodi: `{code}`",
-        parse_mode="Markdown"
-    )
-
-
-async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# /delete handler
+async def delete_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
+        await update.message.reply_text("Sizga ruxsat yo'q!")
         return
-
-    if not context.args:
-        await update.message.reply_text("❌ Kino kodi kiriting")
+    args = context.args
+    if not args:
+        await update.message.reply_text("Iltimos, kino kodini kiriting. Misol: /delete M00001")
         return
+    code = args[0]
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM movies WHERE code=?", (code,))
+    conn.commit()
+    conn.close()
+    await update.message.reply_text(f"Kino {code} o‘chirildi ✅")
 
-    db.delete_movie(context.args[0])
-    await update.message.reply_text("🗑 Kino o‘chirildi")
-
-
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return
-
-    text = update.message.text.replace("/broadcast", "").strip()
-    if not text:
-        await update.message.reply_text("Xabar matnini yozing")
-        return
-
-    with db.connect() as con:
-        users = con.execute("SELECT id FROM users").fetchall()
-
-    sent = 0
-    for user_id, in users:
-        try:
-            await context.bot.send_message(user_id, text)
-            sent += 1
-        except Exception:
-            pass
-
-    await update.message.reply_text(f"📢 Yuborildi: {sent} ta foydalanuvchiga")
-
-
+# /stats handler
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
+        await update.message.reply_text("Sizga ruxsat yo'q!")
         return
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    # Faol oylik
+    today = datetime.now().strftime("%Y-%m-%d")
+    c.execute("SELECT COUNT(*) FROM users WHERE status='faol' AND obuna_end>=?", (today,))
+    active_monthly = c.fetchone()[0]
+    # Oddiy
+    c.execute("SELECT COUNT(*) FROM users WHERE status='oddiy' OR obuna_end<?", (today,))
+    oddiy = c.fetchone()[0]
+    # Hamma
+    c.execute("SELECT COUNT(*) FROM users")
+    all_users = c.fetchone()[0]
+    # Bloklangan: bu yerda logika uchun status='bloklangan'
+    c.execute("SELECT COUNT(*) FROM users WHERE status='bloklangan'")
+    blocked = c.fetchone()[0]
+    conn.close()
+    msg = f"""
+📊 Statistika:
+Oylik obunachilar: {active_monthly}
+Oddiy obunachilar: {oddiy}
+Hamma foydalanuvchilar: {all_users}
+Bloklangan foydalanuvchilar: {blocked}
+"""
+    await update.message.reply_text(msg)
 
-    await update.message.reply_text(
-        f"👥 Foydalanuvchilar: {db.users_count()}"
-    )
-
-
-async def set_fsub(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return
-
-    if not context.args:
-        await update.message.reply_text("Kanal username kiriting")
-        return
-
-    db.set_setting("force_sub", context.args[0])
-    await update.message.reply_text("✅ Majburiy obuna sozlandi")
-
-
-async def set_ad(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return
-
-    text = update.message.text.replace("/set_ad", "").strip()
-    db.set_setting("ad_text", text)
-    await update.message.reply_text("📢 Reklama saqlandi")
-
-
-# ================== MESSAGES ==================
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_force_sub(update, context):
-        await update.message.reply_text("❌ Avval kanalga obuna bo‘ling")
-        return
-
-    text = update.message.text.strip()
-
-    movie = db.get_movie(text)
-    if movie:
-        _, title, desc, file_id = movie
-        await update.message.reply_video(file_id, caption=title)
-        return
-
-    results = db.search_movie(text)
-    if results:
-        msg = "🔍 Topilgan kinolar:\n\n"
-        for code, title in results[:10]:
-            msg += f"🎬 {title} — `{code}`\n"
-        await update.message.reply_text(msg, parse_mode="Markdown")
-        return
-
-    await update.message.reply_text("❌ Kino topilmadi")
-
-
-# ================== RUN ==================
+# Main function
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add_movie))
-    app.add_handler(CommandHandler("delete", delete))
-    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("delete", delete_movie))
     app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CommandHandler("set_fsub", set_fsub))
-    app.add_handler(CommandHandler("set_ad", set_ad))
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-    print("Bot ishga tushdi...")
+    # Run bot
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
