@@ -20,25 +20,34 @@ from states import AddMovie, SubscriptionCheck
 load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("BOT_TOKEN .env faylda topilmadi")
+
 MAIN_ADMIN = int(os.getenv("MAIN_ADMIN", "0"))
+if MAIN_ADMIN == 0:
+    raise ValueError("MAIN_ADMIN .env faylda topilmadi yoki noto'g'ri")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ------------------ START ------------------
+# ────────────────────────────────────────────────
+#                   START
+# ────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     await add_user(u.id, u.username)
 
     if u.id == MAIN_ADMIN or await is_admin(u.id):
-        await update.message.reply_text("Admin panelga xush kelibsiz!\n/addfilm — kino qo‘shish")
+        await update.message.reply_text(
+            "Admin panelga xush kelibsiz!\n\n"
+            "/addfilm  — yangi kino qo‘shish\n"
+            "/stats    — statistika (hozircha oddiy)"
+        )
         return
 
     if await has_active_sub(u.id):
-        await update.message.reply_text(
-            "🎬 Kino kodini yuboring!\nMasalan: K123"
-        )
+        await update.message.reply_text("🎬 Kino kodini yuboring!")
         return
 
     prices = {
@@ -48,40 +57,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "365": await get_setting("price_12m", "300000"),
     }
 
-    kb = [
+    kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"1 oy — {prices['30']} so‘m",  callback_data="sub_30")],
         [InlineKeyboardButton(f"3 oy — {prices['90']} so‘m",  callback_data="sub_90")],
         [InlineKeyboardButton(f"6 oy — {prices['180']} so‘m", callback_data="sub_180")],
         [InlineKeyboardButton(f"12 oy — {prices['365']} so‘m",callback_data="sub_365")],
-    ]
+    ])
 
     text = (
-        "⚠️ Ushbu bot faqat obunachilar uchun ishlaydi!\n\n"
-        f"Karta: {await get_setting('card_number')}\n"
-        f"Egasi: {await get_setting('card_holder')}\n\n"
-        "To‘g‘ri miqdorda to‘lang!\nChek rasmini yuboring."
+        "⚠️ Bot faqat obunachilar uchun ishlaydi!\n\n"
+        f"Karta raqami: {await get_setting('card_number')}\n"
+        f"Egasi:       {await get_setting('card_holder')}\n\n"
+        "To‘g‘ri miqdorda to‘lang va chek rasmini yuboring."
     )
 
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
+    await update.message.reply_text(text, reply_markup=kb)
 
 
-# ------------------ KINO QIDIRISH ------------------
+# ────────────────────────────────────────────────
+#             KINO QIDIRISH (faqat oddiy userlar)
+# ────────────────────────────────────────────────
 
 async def find_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    u = update.effective_user
-    text = update.message.text.strip()
+    user = update.effective_user
 
-    if not await has_active_sub(u.id):
-        await update.message.reply_text("Obuna faol emas. /start ni bosing.")
-        await inc_failed(u.id)
+    # Admin yoki conversation jarayonidagi xabar bo‘lsa — hech narsa qilmaymiz
+    if user.id == MAIN_ADMIN or await is_admin(user.id):
         return
 
+    if not await has_active_sub(user.id):
+        await update.message.reply_text("Obuna faol emas. /start tugmasini bosing.")
+        await inc_failed(user.id)
+        return
+
+    text = update.message.text.strip()
     movie = await get_movie(text)
+
     if not movie:
         await update.message.reply_text("Bunday kod topilmadi 😔")
         return
 
-    code, title, qual, year, lang, rat, file_id = movie[0:7]
+    code, title, qual, year, lang, rat, file_id, *_ = movie
 
     caption = (
         f"🎬 <b>{title}</b>\n"
@@ -94,26 +110,28 @@ async def find_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_video(file_id, caption=caption, parse_mode="HTML")
 
 
-# ------------------ OBUNA TANLASH VA CHEK ------------------
+# ────────────────────────────────────────────────
+#                  OBUNA TANLASH
+# ────────────────────────────────────────────────
 
 async def sub_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if not query.data.startswith("sub_"):
-        return
+        return ConversationHandler.END
 
     days = int(query.data.split("_")[1])
-    price_key = f"price_{days//30 if days<=30 else days//30*10 if days<=90 else days//30*5 if days<=180 else 12}m"
+    price_key = f"price_{days//30 if days <= 30 else days//10 if days <= 90 else days//30*2 if days <= 180 else 12}m"
     price = await get_setting(price_key, "35000")
 
     context.user_data["sub_days"] = days
     context.user_data["sub_price"] = price
 
     text = (
-        f"To‘lov miqdori: <b>{price} so‘m</b>\n"
+        f"To‘lov: <b>{price} so‘m</b>\n"
         f"Karta: {await get_setting('card_number')}\n"
-        f"Ism: {await get_setting('card_holder')}\n\n"
+        f"Ism:   {await get_setting('card_holder')}\n\n"
         "Chek (rasm yoki fayl) yuboring:"
     )
 
@@ -131,31 +149,27 @@ async def receive_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_id = update.message.document.file_id
 
     if not file_id:
-        await update.message.reply_text("Faqat rasm yoki hujjat yuboring!")
+        await update.message.reply_text("Iltimos, rasm yoki hujjat yuboring.")
         return SubscriptionCheck.CHECK
 
     days = context.user_data.get("sub_days", 30)
 
-    kb = [
+    kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"acc_{u.id}_{days}")],
-        [InlineKeyboardButton("❌ Rad etish",   callback_data=f"rej_{u.id}")],
-    ]
+        [InlineKeyboardButton("❌ Rad etish",   callback_data=f"rej_{u.id}")]
+    ])
 
-    caption = (
-        f"Yangi chek!\n\n"
-        f"🆔 {u.id}\n"
-        f"@{u.username or 'yo‘q'}\n"
-        f"Obuna: {days} kun"
-    )
+    caption = f"Chek keldi!\n\n🆔 {u.id}\n@{u.username or 'yo‘q'}\nObuna: {days} kun"
 
     await context.bot.send_photo(
         chat_id=MAIN_ADMIN,
         photo=file_id,
         caption=caption,
-        reply_markup=InlineKeyboardMarkup(kb)
+        reply_markup=kb
     )
 
-    await update.message.reply_text("Chekingiz ko‘rib chiqilmoqda. Javobni kuting...")
+    await update.message.reply_text("Chekingiz admin tomonidan ko‘rib chiqilmoqda...")
+    context.user_data.clear()
     return ConversationHandler.END
 
 
@@ -169,19 +183,21 @@ async def admin_decide(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "acc":
         days = int(extra[0]) if extra else 30
         await set_subscription(uid, days)
-        await context.bot.send_message(uid, f"✅ Obuna {days} kunlik faollashtirildi!")
-        await q.edit_message_caption(caption=q.message.caption + "\n\n✅ TASDIQLANDI")
+        await context.bot.send_message(uid, f"✅ {days} kunlik obuna faollashtirildi!")
+        await q.edit_message_caption(q.message.caption + "\n\n✅ TASDIQLANDI")
     else:
-        await context.bot.send_message(uid, "❌ To‘lov rad etildi. Qayta urinib ko‘ring.")
-        await q.edit_message_caption(caption=q.message.caption + "\n\n❌ RAD ETILDI")
+        await context.bot.send_message(uid, "❌ To‘lov rad etildi. Iltimos qayta urinib ko‘ring.")
+        await q.edit_message_caption(q.message.caption + "\n\n❌ RAD ETILDI")
 
 
-# ------------------ /addfilm — KINO QO‘SHISH ------------------
+# ────────────────────────────────────────────────
+#                  /addfilm jarayoni
+# ────────────────────────────────────────────────
 
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     if u.id != MAIN_ADMIN and not await is_admin(u.id):
-        await update.message.reply_text("Ruxsat yo‘q!")
+        await update.message.reply_text("Sizda ruxsat yo‘q.")
         return ConversationHandler.END
 
     await update.message.reply_text("🎥 Videoni yuboring")
@@ -190,17 +206,17 @@ async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.video:
-        await update.message.reply_text("Video yuboring!")
+        await update.message.reply_text("Video yuboring iltimos.")
         return AddMovie.VIDEO
 
     context.user_data["file_id"] = update.message.video.file_id
-    await update.message.reply_text("Kino nomi (title)?")
+    await update.message.reply_text("Kino nomi?")
     return AddMovie.TITLE
 
 
 async def add_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["title"] = update.message.text.strip()
-    await update.message.reply_text("Sifati? (720p, 1080p, ...)")
+    await update.message.reply_text("Sifati? (masalan: 1080p, WEB-DL)")
     return AddMovie.QUALITY
 
 
@@ -213,23 +229,23 @@ async def add_quality(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         context.user_data["year"] = int(update.message.text.strip())
-    except:
-        await update.message.reply_text("Yil raqam bo‘lishi kerak!")
+    except ValueError:
+        await update.message.reply_text("Yil raqam bo‘lishi kerak.")
         return AddMovie.YEAR
 
-    await update.message.reply_text("Tili? (UZB, RUS, ENG, ...)")
+    await update.message.reply_text("Tili? (UZB / RUS / ENG ...)")
     return AddMovie.LANGUAGE
 
 
 async def add_lang(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["language"] = update.message.text.strip()
-    await update.message.reply_text("Baho? (IMDb 7.2, Kinopoisk 8.1, ...)")
+    await update.message.reply_text("Baho? (masalan: IMDb 7.8)")
     return AddMovie.RATING
 
 
 async def add_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["rating"] = update.message.text.strip()
-    await update.message.reply_text("Noyob kod bering (masalan: K456 yoki MOV123)")
+    await update.message.reply_text("Noyob kod kiriting (masalan: K123, MOV456)")
     return AddMovie.CODE
 
 
@@ -238,7 +254,7 @@ async def add_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     success = await add_movie(code, context.user_data, update.effective_user.id)
 
     if success:
-        await update.message.reply_text(f"✅ Kino qo‘shildi! Kod: <b>{code}</b>", parse_mode="HTML")
+        await update.message.reply_text(f"✅ Kino qo‘shildi!\nKod: <b>{code}</b>", parse_mode="HTML")
     else:
         await update.message.reply_text("Bu kod allaqachon mavjud!")
 
@@ -252,42 +268,35 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# ------------------ STATISTIKA (oddiy versiya) ------------------
-
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    u = update.effective_user
-    if u.id != MAIN_ADMIN and not await is_admin(u.id):
-        return
-
-    async with aiosqlite.connect(db.DB_FILE) as db:
-        total = (await (await db.execute("SELECT COUNT(*) FROM users")).fetchone())[0]
-        active = (await (await db.execute(
-            "SELECT COUNT(*) FROM users WHERE sub_until > datetime('now')"
-        )).fetchone())[0]
-
-    text = (
-        f"📊 Statistik\n\n"
-        f"Jami foydalanuvchilar: {total}\n"
-        f"Faol obunachilar: {active}\n"
-        # keyinchalik blocked va oddiy qo‘shsa bo‘ladi
-    )
-
-    await update.message.reply_text(text)
-
+# ────────────────────────────────────────────────
+#                     BOTNI ISHGA TUSHIRISH
+# ────────────────────────────────────────────────
 
 def main():
     app = Application.builder().token(TOKEN).build()
 
-    # oddiy buyruqlar
+    # 1. Buyruqlar va conversationlar
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("addfilm", add_start))
 
-    # kino qidirish — har qanday matn
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, find_movie))
+    add_conv = ConversationHandler(
+        entry_points=[CommandHandler("addfilm", add_start)],
+        states={
+            AddMovie.VIDEO:     [MessageHandler(filters.VIDEO, add_video)],
+            AddMovie.TITLE:     [MessageHandler(filters.TEXT & ~filters.COMMAND, add_title)],
+            AddMovie.QUALITY:   [MessageHandler(filters.TEXT & ~filters.COMMAND, add_quality)],
+            AddMovie.YEAR:      [MessageHandler(filters.TEXT & ~filters.COMMAND, add_year)],
+            AddMovie.LANGUAGE:  [MessageHandler(filters.TEXT & ~filters.COMMAND, add_lang)],
+            AddMovie.RATING:    [MessageHandler(filters.TEXT & ~filters.COMMAND, add_rating)],
+            AddMovie.CODE:      [MessageHandler(filters.TEXT & ~filters.COMMAND, add_code)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True
+    )
+    app.add_handler(add_conv)
 
-    # obuna jarayoni
     sub_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(sub_callback, pattern="^sub_")],
+        entry_points=[CallbackQueryHandler(sub_callback, pattern=r"^sub_\d+$")],
         states={
             SubscriptionCheck.CHECK: [
                 MessageHandler(filters.PHOTO | filters.Document.ALL, receive_check)
@@ -297,25 +306,11 @@ def main():
     )
     app.add_handler(sub_conv)
 
-    # admin tasdiqlash
-    app.add_handler(CallbackQueryHandler(admin_decide, pattern="^(acc|rej)_"))
+    # 2. Inline tugmalar
+    app.add_handler(CallbackQueryHandler(admin_decide, pattern=r"^(acc|rej)_"))
 
-    # kino qo‘shish jarayoni
-    add_conv = ConversationHandler(
-        entry_points=[CommandHandler("addfilm", add_start)],
-        states={
-            AddMovie.VIDEO:    [MessageHandler(filters.VIDEO, add_video)],
-            AddMovie.TITLE:    [MessageHandler(filters.TEXT & ~filters.COMMAND, add_title)],
-            AddMovie.QUALITY:  [MessageHandler(filters.TEXT & ~filters.COMMAND, add_quality)],
-            AddMovie.YEAR:     [MessageHandler(filters.TEXT & ~filters.COMMAND, add_year)],
-            AddMovie.LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_lang)],
-            AddMovie.RATING:   [MessageHandler(filters.TEXT & ~filters.COMMAND, add_rating)],
-            AddMovie.CODE:     [MessageHandler(filters.TEXT & ~filters.COMMAND, add_code)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        allow_reentry=True
-    )
-    app.add_handler(add_conv)
+    # 3. Eng oxirida — oddiy matnli xabarlar (kino kodi qidirish)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, find_movie))
 
     asyncio.run(init())
     print("Bot ishga tushdi...")
