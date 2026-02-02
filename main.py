@@ -115,7 +115,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_subscription = db.check_subscription(user_id)
     user_data = db.get_user(user_id)
     
-    if user_data and user_data.get('is_blocked'):
+    # sqlite3.Row ni dict ga o'girish
+    user_dict = None
+    if user_data:
+        user_dict = dict(user_data) if hasattr(user_data, 'keys') else user_data
+    
+    if user_dict and user_dict.get('is_blocked'):
         await update.message.reply_text("❌ Siz bloklangansiz. Botdan foydalana olmaysiz.")
         return
     
@@ -148,8 +153,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Bloklanganligini tekshirish
     user_data = db.get_user(user_id)
-    if user_data and user_data.get('is_blocked'):
-        return
+    if user_data:
+        user_dict = dict(user_data) if hasattr(user_data, 'keys') else user_data
+        if user_dict and user_dict.get('is_blocked'):
+            return
     
     # Aktivlikni yangilash
     db.update_activity(user_id)
@@ -169,15 +176,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         movie = db.get_movie(text)
         if movie:
             # Kino yuborish
-            if movie['file_type'] == 'video':
+            movie_dict = dict(movie) if hasattr(movie, 'keys') else movie
+            if movie_dict['file_type'] == 'video':
                 await update.message.reply_video(
-                    video=movie['file_id'],
-                    caption=format_movie_info(movie)
+                    video=movie_dict['file_id'],
+                    caption=format_movie_info(movie_dict)
                 )
-            elif movie['file_type'] == 'document':
+            elif movie_dict['file_type'] == 'document':
                 await update.message.reply_document(
-                    document=movie['file_id'],
-                    caption=format_movie_info(movie)
+                    document=movie_dict['file_id'],
+                    caption=format_movie_info(movie_dict)
                 )
         else:
             await update.message.reply_text("❌ Bunday kodli kino topilmadi.")
@@ -197,12 +205,13 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if movies:
             response = "🔍 **Qidiruv natijalari:**\n\n"
             for movie in movies:
-                response += f"🎬 {movie['name']} - Kodi: `{movie['code']}`\n"
+                movie_dict = dict(movie) if hasattr(movie, 'keys') else movie
+                response += f"🎬 {movie_dict['name']} - Kodi: `{movie_dict['code']}`\n"
             await update.message.reply_text(response)
         else:
             await update.message.reply_text("❌ Hech narsa topilmadi.")
     else:
-        await update.message.reply_text("Qidirish uchun: /search <kino nomi yoki kodi>")
+        await update.message.reply_text("Qidirush uchun: /search <kino nomi yoki kodi>")
 
 # ========== OBUNA/TO'LOV HANDLERLARI ==========
 async def subscription_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -361,22 +370,23 @@ async def payment_decision_callback(update: Update, context: ContextTypes.DEFAUL
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM payments WHERE id = ?', (payment_id,))
         payment = cursor.fetchone()
+        payment_dict = dict(payment) if payment and hasattr(payment, 'keys') else payment
     
-    if not payment:
+    if not payment_dict:
         await query.edit_message_text("❌ To'lov topilmadi.")
         return
     
     if action == 'approve':
         # Obunani faollashtirish
-        db.update_subscription(payment['user_id'], payment['period_days'])
+        db.update_subscription(payment_dict['user_id'], payment_dict['period_days'])
         db.update_payment_status(payment_id, 'approved', query.from_user.id)
         
         # Foydalanuvchiga xabar
         try:
             await context.bot.send_message(
-                chat_id=payment['user_id'],
+                chat_id=payment_dict['user_id'],
                 text=f"✅ To'lovingiz tasdiqlandi!\n"
-                     f"Obuna {payment['period_days']} kunga faollashtirildi.\n\n"
+                     f"Obuna {payment_dict['period_days']} kunga faollashtirildi.\n\n"
                      f"Endi kinolarni tomosha qilishingiz mumkin!"
             )
         except:
@@ -390,7 +400,7 @@ async def payment_decision_callback(update: Update, context: ContextTypes.DEFAUL
         # Foydalanuvchiga xabar
         try:
             await context.bot.send_message(
-                chat_id=payment['user_id'],
+                chat_id=payment_dict['user_id'],
                 text="❌ To'lovingiz rad etildi.\n"
                      "Sabab: Noto'g'ri chek yoki to'lov ma'lumotlari.\n\n"
                      "Iltimos, to'lovni qayta amalga oshiring va haqiqiy chek yuboring."
