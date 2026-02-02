@@ -612,4 +612,170 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("👥 Admin qo'shish", callback_data='add_admin')],
     ]
     
-    await update
+    await update.message.reply_text(
+        "⚙️ **Admin sozlamalari**",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sozlamalar callback"""
+    query = update.callback_query
+    await query.answer()
+    
+    if not is_admin(query.from_user.id):
+        await query.answer("❌ Ruxsat yo'q!", show_alert=True)
+        return
+    
+    data = query.data
+    
+    if data == 'set_prices':
+        current_prices = f"""
+💰 **Joriy narxlar:**
+
+1 oylik: {db.get_setting('monthly_price')} so'm
+3 oylik: {db.get_setting('quarterly_price')} so'm
+6 oylik: {db.get_setting('semiannual_price')} so'm
+12 oylik: {db.get_setting('annual_price')} so'm
+
+Yangi narxni quyidagi formatda yuboring:
+`oylik_narx;3_oylik_narx;6_oylik_narx;12_oylik_narx`
+
+Masalan: 29900;79900;149900;279900
+"""
+        await query.edit_message_text(current_prices, parse_mode='Markdown')
+        context.user_data['waiting_for'] = 'prices'
+    
+    elif data == 'set_card':
+        current_card = f"""
+💳 **Joriy karta ma'lumotlari:**
+
+Karta raqami: {db.get_setting('card_number')}
+Karta egasi: {db.get_setting('card_holder')}
+
+Yangi ma'lumotlarni quyidagi formatda yuboring:
+`karta_raqami;karta_egasi`
+
+Masalan: 8600 1234 5678 9012;SOLEJON ADASHOV ISROILOVICH
+"""
+        await query.edit_message_text(current_card)
+        context.user_data['waiting_for'] = 'card'
+    
+    elif data == 'add_admin':
+        await query.edit_message_text(
+            "Yangi admin ID sini yuboring:\n\n"
+            "Admin ID sini olish uchun: @userinfobot"
+        )
+        context.user_data['waiting_for'] = 'admin_id'
+
+async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sozlamalar inputini qabul qilish"""
+    user_id = update.effective_user.id
+    text = update.message.text
+    
+    if not context.user_data.get('waiting_for'):
+        return
+    
+    waiting_for = context.user_data['waiting_for']
+    
+    if waiting_for == 'prices':
+        try:
+            prices = text.split(';')
+            if len(prices) != 4:
+                raise ValueError
+            
+            db.update_setting('monthly_price', prices[0])
+            db.update_setting('quarterly_price', prices[1])
+            db.update_setting('semiannual_price', prices[2])
+            db.update_setting('annual_price', prices[3])
+            
+            await update.message.reply_text("✅ Narxlar yangilandi!")
+        except:
+            await update.message.reply_text("❌ Noto'g'ri format!")
+    
+    elif waiting_for == 'card':
+        try:
+            card_data = text.split(';', 1)
+            if len(card_data) != 2:
+                raise ValueError
+            
+            db.update_setting('card_number', card_data[0].strip())
+            db.update_setting('card_holder', card_data[1].strip())
+            
+            await update.message.reply_text("✅ Karta ma'lumotlari yangilandi!")
+        except:
+            await update.message.reply_text("❌ Noto'g'ri format!")
+    
+    elif waiting_for == 'admin_id':
+        try:
+            admin_id = int(text.strip())
+            db.add_admin(admin_id, user_id)
+            await update.message.reply_text(f"✅ {admin_id} admin sifatida qo'shildi!")
+        except:
+            await update.message.reply_text("❌ Noto'g'ri ID!")
+    
+    context.user_data.clear()
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel command"""
+    await update.message.reply_text("❌ Operatsiya bekor qilindi.")
+    context.user_data.clear()
+    return ConversationHandler.END
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Xatolarni qayta ishlash"""
+    logger.error(f"Xato: {context.error}", exc_info=context.error)
+
+# ========== ASOSIY FUNKSIYA ==========
+def main():
+    """Botni ishga tushirish"""
+    # Bot yaratish
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Conversation handlerlar
+    add_movie_conv = ConversationHandler(
+        entry_points=[CommandHandler('add', add_movie_start)],
+        states={
+            ADD_MOVIE: [MessageHandler(filters.VIDEO | filters.Document.ALL, add_movie_file)],
+            GET_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_title)],
+            GET_QUALITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_quality)],
+            GET_YEAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_year)],
+            GET_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_language)],
+            GET_RATING: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_rating)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+    
+    payment_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(confirm_payment_callback, pattern='^confirm_payment$')],
+        states={
+            PAYMENT_CONFIRM: [MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_payment_receipt)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+    
+    # Handlerlarni qo'shish
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('search', search_movie))
+    application.add_handler(CommandHandler('delete', delete_movie))
+    application.add_handler(CommandHandler('broadcast', broadcast))
+    application.add_handler(CommandHandler('stats', stats))
+    application.add_handler(CommandHandler('settings', admin_settings))
+    
+    application.add_handler(add_movie_conv)
+    application.add_handler(payment_conv)
+    
+    application.add_handler(CallbackQueryHandler(subscription_callback, pattern='^sub_'))
+    application.add_handler(CallbackQueryHandler(payment_decision_callback, pattern='^(approve|reject)_'))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern='^(set_prices|set_card|add_admin)$'))
+    
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settings_input))
+    
+    application.add_error_handler(error_handler)
+    
+    # Botni ishga tushirish
+    print("🤖 Bot ishga tushdi...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == '__main__':
+    main()
