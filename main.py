@@ -33,7 +33,7 @@ MAIN_ADMIN = int(os.getenv('MAIN_ADMIN'))
 if 'RENDER' in os.environ:
     DB_PATH = '/tmp/database.db'
     print("RENDER muhitida ishlayapman")
-    print(f"DB yo'li: {DB_PATH}")
+    print("DB yo'li:", DB_PATH)
 else:
     DB_PATH = 'database.db'
     print("Lokal muhitda ishlayapman")
@@ -77,9 +77,9 @@ def get_payment_info():
     card_number = db.get_setting('card_number') or '8600 1234 5678 9012'
     card_holder = db.get_setting('card_holder') or 'SOLEJON ADASHOV ISROILOVICH'
     
-    return f"""
+    info = f"""
 To'lov ma'lumotlari:
-    
+
 Karta raqami: `{card_number}`
 Karta egasi: {card_holder}
 
@@ -88,20 +88,22 @@ To'lov cheki talab qilinadi.
 
 To'lov qilgach, chekni (foto yoki fayl) shu yerga yuboring.
 """
+    return info
 
 def format_movie_info(movie):
     """Kino ma'lumotlarini chiroyli formatlash"""
-    return f"""
+    info = f"""
 {movie.get('name', 'Noma\'lum')}
-    
+
 Kodi: `{movie.get('code', 'Noma\'lum')}`
 Sifati: {movie.get('quality', 'Noma\'lum')}
 Yili: {movie.get('year', 'Noma\'lum')}
 Tili: {movie.get('language', 'Noma\'lum')}
 Bahosi: {movie.get('rating', 'Noma\'lum')}
-    
+
 Tavsif: {movie.get('description', 'Tavsif yo\'q')}
 """
+    return info
 
 # ========== ASOSIY HANDLERLAR ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -215,7 +217,7 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         movies = db.search_movies(query)
         
         if movies:
-            response = "Qidiruv natijalari:\n\n"
+            response = "Qidiruv natijasi:\n\n"
             for movie in movies:
                 response += f"{movie.get('name', 'Noma\'lum')} - Kodi: `{movie.get('code', 'Noma\'lum')}`\n"
             await update.message.reply_text(response)
@@ -283,9 +285,9 @@ async def confirm_payment_callback(update: Update, context: ContextTypes.DEFAULT
     await query.edit_message_text(
         "To'lov qilgach, chekni (foto yoki fayl) shu yerga yuboring.\n\n"
         "Chekda quyidagilar ko'rinishi kerak:\n"
-        "• To'lov summasi\n"
-        "• Vaqti\n"
-        "• Karta raqami (oxirgi 4 ta raqam)\n\n"
+        "1. To'lov summasi\n"
+        "2. Vaqti\n"
+        "3. Karta raqami (oxirgi 4 ta raqam)\n\n"
         "Soxta chek yuborilgan holda hisob bloklanadi!"
     )
     return PAYMENT_CONFIRM
@@ -388,7 +390,7 @@ async def payment_decision_callback(update: Update, context: ContextTypes.DEFAUL
     
     user_id = query.from_user.id
     if not is_admin(user_id):
-        await query.answer("Sizda ruxsat yo'q!", show_alert=True)
+        await query.answer("Ruxsat yo'q!", show_alert=True)
         return
     
     data = query.data
@@ -703,13 +705,18 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     
     if data == 'set_prices':
+        monthly = db.get_setting('monthly_price') or '29900'
+        quarterly = db.get_setting('quarterly_price') or '79900'
+        semiannual = db.get_setting('semiannual_price') or '149900'
+        annual = db.get_setting('annual_price') or '279900'
+        
         current_prices = f"""
 Joriy narxlar:
 
-1 oylik: {db.get_setting('monthly_price') or '29900'} so'm
-3 oylik: {db.get_setting('quarterly_price') or '79900'} so'm
-6 oylik: {db.get_setting('semiannual_price') or '149900'} so'm
-12 oylik: {db.get_setting('annual_price') or '279900'} so'm
+1 oylik: {monthly} so'm
+3 oylik: {quarterly} so'm
+6 oylik: {semiannual} so'm
+12 oylik: {annual} so'm
 
 Yangi narxni quyidagi formatda yuboring:
 oylik_narx;3_oylik_narx;6_oylik_narx;12_oylik_narx
@@ -720,11 +727,14 @@ Masalan: 29900;79900;149900;279900
         context.user_data['waiting_for'] = 'prices'
     
     elif data == 'set_card':
+        card_number = db.get_setting('card_number') or '8600 1234 5678 9012'
+        card_holder = db.get_setting('card_holder') or 'SOLEJON ADASHOV ISROILOVICH'
+        
         current_card = f"""
 Joriy karta ma'lumotlari:
 
-Karta raqami: {db.get_setting('card_number') or '8600 1234 5678 9012'}
-Karta egasi: {db.get_setting('card_holder') or 'SOLEJON ADASHOV ISROILOVICH'}
+Karta raqami: {card_number}
+Karta egasi: {card_holder}
 
 Yangi ma'lumotlarni quyidagi formatda yuboring:
 karta_raqami;karta_egasi
@@ -938,8 +948,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Botni ishga tushirish"""
     print("Bot ishga tushmoqda...")
-    print(f"DB yo'li: {db.db_path}")
-    print(f"Admin ID: {MAIN_ADMIN}")
+    print("DB yo'li:", db.db_path)
+    print("Admin ID:", MAIN_ADMIN)
     
     # Bot yaratish
     application = Application.builder().token(BOT_TOKEN).build()
