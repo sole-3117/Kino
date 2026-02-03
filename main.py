@@ -1,26 +1,25 @@
 import os
 import logging
-import asyncio
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 from telegram import (
-    Update, 
-    InlineKeyboardButton, 
+    Update,
+    InlineKeyboardButton,
     InlineKeyboardMarkup,
     ReplyKeyboardMarkup
 )
 from telegram.ext import (
-    Application, 
-    CommandHandler, 
-    MessageHandler, 
+    Application,
+    CommandHandler,
+    MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
     ConversationHandler,
     filters
 )
 
-from db import Database
+from db import Database  # Sizning db.py faylingizdagi Database class
 
 # .env faylini yuklash
 load_dotenv()
@@ -29,7 +28,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 MAIN_ADMIN = int(os.getenv('MAIN_ADMIN'))
 
-# RENDER uchun DB yo'li
+# DB yo'li
 if 'RENDER' in os.environ:
     DB_PATH = '/tmp/database.db'
     print("RENDER muhitida ishlayapman")
@@ -38,12 +37,11 @@ else:
     DB_PATH = 'database.db'
     print("Lokal muhitda ishlayapman")
 
-# Database obyekti
 db = Database(DB_PATH)
 
 # Conversation holatlari
 ADD_MOVIE, GET_TITLE, GET_QUALITY, GET_YEAR, GET_LANGUAGE, GET_RATING = range(6)
-PAYMENT_CONFIRM = range(1)
+PAYMENT_CONFIRM = 10  # Alohida qiymat - to'qnashuvni oldini olish uchun
 
 # Logging
 logging.basicConfig(
@@ -201,6 +199,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             logger.info(f"Kino topilmadi: {text}")
             await update.message.reply_text("Bunday kodli kino topilmadi.")
+    # Agar setting input kutilyotgan bo'lsa, uni qayta ishlash uchun alohida handler bor
 
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino qidirish"""
@@ -394,17 +393,16 @@ async def payment_decision_callback(update: Update, context: ContextTypes.DEFAUL
         return
     
     data = query.data
-    action, payment_id = data.split('_')
+    try:
+        action, payment_id = data.split('_', 1)
+    except ValueError:
+        await query.answer("Noto'g'ri data!", show_alert=True)
+        return
     
     logger.info(f"To'lov qarori: {action} - ID={payment_id}")
     
     # To'lovni topish
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM payments WHERE id = ?', (payment_id,))
-        row = cursor.fetchone()
-        payment = dict(row) if row else None
-    
+    payment = db.get_payment(payment_id)
     if not payment:
         await query.edit_message_text("To'lov topilmadi.")
         return
@@ -450,7 +448,7 @@ async def add_movie_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino qo'shishni boshlash"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("Sizda ruxsat yo'q!")
-        return
+        return ConversationHandler.END
     
     logger.info(f"Kino qo'shish boshlanmoqda: {update.effective_user.id}")
     
@@ -614,10 +612,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Broadcast xabari: {message[:50]}...")
     
     # Barcha foydalanuvchilarga yuborish
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT user_id FROM users WHERE is_blocked = 0')
-        users = cursor.fetchall()
+    users = db.get_all_users(blocked=False)
     
     sent = 0
     failed = 0
@@ -781,16 +776,15 @@ Fayl yo'li: {db_info['path']}
         await query.edit_message_text(response)
 
 async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sozlamalar inputini qabul qilish"""
+    """Sozlamalar inputini qabul qilish — faqat admin va waiting_for bo'lsa ishlaydi"""
     user_id = update.effective_user.id
     text = update.message.text
     
-    logger.info(f"Sozlama kiritildi: {text[:50]}...")
-    
-    if not context.user_data.get('waiting_for'):
-        return
+    if not is_admin(user_id) or not context.user_data.get('waiting_for'):
+        return  # Oddiy foydalanuvchilar uchun hech narsa qilmasin
     
     waiting_for = context.user_data['waiting_for']
+    logger.info(f"Sozlama kiritildi: {text[:50]}...")
     
     if waiting_for == 'prices':
         try:
@@ -798,15 +792,15 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
             if len(prices) != 4:
                 raise ValueError
             
-            db.update_setting('monthly_price', prices[0])
-            db.update_setting('quarterly_price', prices[1])
-            db.update_setting('semiannual_price', prices[2])
-            db.update_setting('annual_price', prices[3])
+            db.update_setting('monthly_price', prices[0].strip())
+            db.update_setting('quarterly_price', prices[1].strip())
+            db.update_setting('semiannual_price', prices[2].strip())
+            db.update_setting('annual_price', prices[3].strip())
             
             await update.message.reply_text("Narxlar yangilandi!")
             logger.info(f"Narxlar yangilandi: {prices}")
-        except:
-            await update.message.reply_text("Noto'g'ri format!")
+        except ValueError:
+            await update.message.reply_text("Noto'g'ri format! Masalan: 29900;79900;149900;279900")
     
     elif waiting_for == 'card':
         try:
@@ -819,8 +813,8 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
             
             await update.message.reply_text("Karta ma'lumotlari yangilandi!")
             logger.info(f"Karta ma'lumotlari yangilandi")
-        except:
-            await update.message.reply_text("Noto'g'ri format!")
+        except ValueError:
+            await update.message.reply_text("Noto'g'ri format! Masalan: 8600 1234 5678 9012;SOLEJON ADASHOV ISROILOVICH")
     
     elif waiting_for == 'admin_id':
         try:
@@ -828,8 +822,8 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
             db.add_admin(admin_id, user_id)
             await update.message.reply_text(f"{admin_id} admin sifatida qo'shildi!")
             logger.info(f"Yangi admin: {admin_id}")
-        except:
-            await update.message.reply_text("Noto'g'ri ID!")
+        except ValueError:
+            await update.message.reply_text("Noto'g'ri ID! Faqat raqam kiriting.")
     
     context.user_data.clear()
 
@@ -844,17 +838,8 @@ async def db_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if db_info['exists']:
         # Jadval sonlarini olish
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            tables = cursor.fetchall()
-            
-            tables_info = ""
-            for table in tables:
-                table_name = table[0]
-                cursor.execute(f'SELECT COUNT(*) FROM {table_name}')
-                count = cursor.fetchone()[0]
-                tables_info += f"- {table_name}: {count} ta\n"
+        table_counts = db.get_table_counts()
+        tables_info = "\n".join(f"- {table}: {count} ta" for table, count in table_counts.items())
         
         response = f"""
 Baza ishlayapti
@@ -892,16 +877,16 @@ async def reset_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Eski faylni o'chirish
-        if os.path.exists(db.db_path):
-            os.remove(db.db_path)
-            logger.info(f"Eski baza o'chirildi: {db.db_path}")
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
+            logger.info(f"Eski baza o'chirildi: {DB_PATH}")
         
         # Yangi baza yaratish
         db.init_db()
         
         await update.message.reply_text(
             f"Baza qayta yaratildi!\n"
-            f"Fayl yo'li: {db.db_path}\n\n"
+            f"Fayl yo'li: {DB_PATH}\n\n"
             f"Endi /add bilan kino qo'shishni sinab ko'ring."
         )
         logger.info("Baza qayta yaratildi")
@@ -925,12 +910,12 @@ async def list_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     response = "Barcha kinolar:\n\n"
     for movie in movies:
         response += f"`{movie.get('code', '?')}` - {movie.get('name', 'Noma\'lum')}\n"
-        if len(response) > 3000:  # Telegram xabar chegarasi
-            await update.message.reply_text(response)
+        if len(response) > 3000:  # Telegram limit
+            await update.message.reply_text(response, parse_mode='Markdown')
             response = ""
     
     if response:
-        await update.message.reply_text(response)
+        await update.message.reply_text(response, parse_mode='Markdown')
     
     logger.info(f"{len(movies)} ta kino ro'yxati chiqarildi")
 
@@ -948,7 +933,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Botni ishga tushirish"""
     print("Bot ishga tushmoqda...")
-    print("DB yo'li:", db.db_path)
+    print("DB yo'li:", DB_PATH)
     print("Admin ID:", MAIN_ADMIN)
     
     # Bot yaratish
@@ -994,7 +979,10 @@ def main():
     application.add_handler(CallbackQueryHandler(payment_decision_callback, pattern='^(approve|reject)_'))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern='^(set_prices|set_card|add_admin|db_status)$'))
     
+    # Asosiy message handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Settings input handler — eng oxirida, faqat kerak bo'lganda
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settings_input))
     
     application.add_error_handler(error_handler)
