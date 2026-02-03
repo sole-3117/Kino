@@ -90,7 +90,7 @@ To'lov qilgach, chekni (foto yoki fayl) shu yerga yuboring.
 
 def format_movie_info(movie):
     """Kino ma'lumotlarini chiroyli formatlash"""
-    info = f"""
+    info = rf"""
 {movie.get('name', 'Noma\'lum')}
 
 Kodi: `{movie.get('code', 'Noma\'lum')}`
