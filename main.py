@@ -32,11 +32,11 @@ MAIN_ADMIN = int(os.getenv('MAIN_ADMIN'))
 # RENDER uchun DB yo'li
 if 'RENDER' in os.environ:
     DB_PATH = '/tmp/database.db'
-    print("🔧 RENDER muhitida ishlayapman")
-    print(f"📁 DB yo'li: {DB_PATH}")
+    print("RENDER muhitida ishlayapman")
+    print(f"DB yo'li: {DB_PATH}")
 else:
     DB_PATH = 'database.db'
-    print("💻 Lokal muhitda ishlayapman")
+    print("Lokal muhitda ishlayapman")
 
 # Database obyekti
 db = Database(DB_PATH)
@@ -65,10 +65,10 @@ def get_subscription_keyboard():
     annual = db.get_setting('annual_price') or '279900'
     
     keyboard = [
-        [InlineKeyboardButton(f"📅 1 oylik - {monthly} so'm", callback_data='sub_1')],
-        [InlineKeyboardButton(f"📅 3 oylik - {quarterly} so'm", callback_data='sub_3')],
-        [InlineKeyboardButton(f"📅 6 oylik - {semiannual} so'm", callback_data='sub_6')],
-        [InlineKeyboardButton(f"📅 12 oylik - {annual} so'm", callback_data='sub_12')],
+        [InlineKeyboardButton(f"1 oylik - {monthly} so'm", callback_data='sub_1')],
+        [InlineKeyboardButton(f"3 oylik - {quarterly} so'm", callback_data='sub_3')],
+        [InlineKeyboardButton(f"6 oylik - {semiannual} so'm", callback_data='sub_6')],
+        [InlineKeyboardButton(f"12 oylik - {annual} so'm", callback_data='sub_12')],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -78,29 +78,29 @@ def get_payment_info():
     card_holder = db.get_setting('card_holder') or 'SOLEJON ADASHOV ISROILOVICH'
     
     return f"""
-💳 **To'lov ma'lumotlari:**
+To'lov ma'lumotlari:
     
 Karta raqami: `{card_number}`
 Karta egasi: {card_holder}
 
-⚠️ **OGOHLANTIRISH!** Kartaga ko'p ham, kam ham pul tashlanmasin!
+OGOHLANTIRISH! Kartaga ko'p ham, kam ham pul tashlanmasin!
 To'lov cheki talab qilinadi.
 
-💸 To'lov qilgach, chekni (foto yoki fayl) shu yerga yuboring.
+To'lov qilgach, chekni (foto yoki fayl) shu yerga yuboring.
 """
 
 def format_movie_info(movie):
     """Kino ma'lumotlarini chiroyli formatlash"""
     return f"""
-🎬 **{movie.get('name', 'Noma\'lum')}**
+{movie.get('name', 'Noma\'lum')}
     
-📁 Kodi: `{movie.get('code', 'Noma\'lum')}`
-📊 Sifati: {movie.get('quality', 'Noma\'lum')}
-📅 Yili: {movie.get('year', 'Noma\'lum')}
-🌐 Tili: {movie.get('language', 'Noma\'lum')}
-⭐ Bahosi: {movie.get('rating', 'Noma\'lum')}
+Kodi: `{movie.get('code', 'Noma\'lum')}`
+Sifati: {movie.get('quality', 'Noma\'lum')}
+Yili: {movie.get('year', 'Noma\'lum')}
+Tili: {movie.get('language', 'Noma\'lum')}
+Bahosi: {movie.get('rating', 'Noma\'lum')}
     
-📝 Tavsif: {movie.get('description', 'Tavsif yo\'q')}
+Tavsif: {movie.get('description', 'Tavsif yo\'q')}
 """
 
 # ========== ASOSIY HANDLERLAR ==========
@@ -109,12 +109,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     
-    logger.info(f"📞 Start komanda: {user_id} - @{user.username}")
+    logger.info(f"Start komanda: {user_id} - @{user.username}")
     
     # Foydalanuvchini bazaga qo'shish
     success = db.add_user(user_id, user.username, user.full_name)
     if not success:
-        logger.error(f"❌ Foydalanuvchi qo'shilmadi: {user_id}")
+        logger.error(f"Foydalanuvchi qo'shilmadi: {user_id}")
     
     # Aktivlikni yangilash
     db.update_activity(user_id)
@@ -124,13 +124,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = db.get_user(user_id)
     
     if user_data and user_data.get('is_blocked'):
-        await update.message.reply_text("❌ Siz bloklangansiz. Botdan foydalana olmaysiz.")
+        await update.message.reply_text("Siz bloklangansiz. Botdan foydalana olmaysiz.")
         return
     
     if not has_subscription:
         # Obuna boshlash
         welcome_text = """
-🎬 **Kino Botga xush kelibsiz!**
+Kino Botga xush kelibsiz!
 
 Bu bot oylik obuna asosida ishlaydi.
 Obuna haqi:
@@ -142,10 +142,10 @@ Obuna haqi:
     else:
         # Obuna aktiv
         await update.message.reply_text(
-            "🎬 Kino Botga xush kelibsiz!\n\n"
+            "Kino Botga xush kelibsiz!\n\n"
             "Kino kodini yuboring yoki /search bilan qidiring.",
             reply_markup=ReplyKeyboardMarkup(
-                [["🔍 Kino qidirish"], ["📊 Statistika"]],
+                [["Kino qidirish"], ["Statistika"]],
                 resize_keyboard=True
             )
         )
@@ -155,12 +155,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
     
-    logger.info(f"✉️ Xabar: {user_id} - {text[:50]}")
+    logger.info(f"Xabar: {user_id} - {text[:50]}")
     
     # Bloklanganligini tekshirish
     user_data = db.get_user(user_id)
     if user_data and user_data.get('is_blocked'):
-        logger.info(f"🚫 Bloklangan foydalanuvchi: {user_id}")
+        logger.info(f"Bloklangan foydalanuvchi: {user_id}")
         return
     
     # Aktivlikni yangilash
@@ -169,7 +169,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Subscriptionni tekshirish
     if not db.check_subscription(user_id):
         await update.message.reply_text(
-            "❌ Sizda aktiv obuna yo'q.\n"
+            "Sizda aktiv obuna yo'q.\n"
             "Obuna uchun /start ni bosing.",
             reply_markup=get_subscription_keyboard()
         )
@@ -177,10 +177,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Kino kodini tekshirish
     if text.isdigit() or (len(text) <= 10 and text.isalnum()):
-        logger.info(f"🔍 Kino qidirilmoqda: {text}")
+        logger.info(f"Kino qidirilmoqda: {text}")
         movie = db.get_movie(text)
         if movie:
-            logger.info(f"✅ Kino topildi: {movie.get('name')}")
+            logger.info(f"Kino topildi: {movie.get('name')}")
             # Kino yuborish
             if movie.get('file_type') == 'video':
                 await update.message.reply_video(
@@ -194,35 +194,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await update.message.reply_text(
-                    f"✅ Kino topildi:\n\n{format_movie_info(movie)}"
+                    f"Kino topildi:\n\n{format_movie_info(movie)}"
                 )
         else:
-            logger.info(f"❌ Kino topilmadi: {text}")
-            await update.message.reply_text("❌ Bunday kodli kino topilmadi.")
+            logger.info(f"Kino topilmadi: {text}")
+            await update.message.reply_text("Bunday kodli kino topilmadi.")
 
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino qidirish"""
     user_id = update.effective_user.id
     
     if not db.check_subscription(user_id):
-        await update.message.reply_text("❌ Obuna talab qilinadi.")
+        await update.message.reply_text("Obuna talab qilinadi.")
         return
     
     if context.args:
         query = ' '.join(context.args)
-        logger.info(f"🔍 Qidiruv so'rovi: {query}")
+        logger.info(f"Qidiruv so'rovi: {query}")
         
         movies = db.search_movies(query)
         
         if movies:
-            response = "🔍 **Qidiruv natijalari:**\n\n"
+            response = "Qidiruv natijalari:\n\n"
             for movie in movies:
-                response += f"🎬 {movie.get('name', 'Noma\'lum')} - Kodi: `{movie.get('code', 'Noma\'lum')}`\n"
+                response += f"{movie.get('name', 'Noma\'lum')} - Kodi: `{movie.get('code', 'Noma\'lum')}`\n"
             await update.message.reply_text(response)
-            logger.info(f"✅ {len(movies)} ta kino topildi")
+            logger.info(f"{len(movies)} ta kino topildi")
         else:
-            await update.message.reply_text("❌ Hech narsa topilmadi.")
-            logger.info("❌ Hech narsa topilmadi")
+            await update.message.reply_text("Hech narsa topilmadi.")
+            logger.info("Hech narsa topilmadi")
     else:
         await update.message.reply_text("Qidirish uchun: /search <kino nomi yoki kodi>")
 
@@ -235,7 +235,7 @@ async def subscription_callback(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = query.from_user.id
     data = query.data
     
-    logger.info(f"💰 Obuna tanlandi: {user_id} - {data}")
+    logger.info(f"Obuna tanlandi: {user_id} - {data}")
     
     if data.startswith('sub_'):
         period = int(data.split('_')[1])
@@ -263,9 +263,9 @@ async def subscription_callback(update: Update, context: ContextTypes.DEFAULT_TY
         
         # To'lov ma'lumotlarini chiqarish
         payment_text = get_payment_info()
-        payment_text += f"\n💵 Tanlangan obuna: {period} oy - {amount} so'm"
+        payment_text += f"\nTanlangan obuna: {period} oy - {amount} so'm"
         
-        keyboard = [[InlineKeyboardButton("💳 To'lov qildim", callback_data='confirm_payment')]]
+        keyboard = [[InlineKeyboardButton("To'lov qildim", callback_data='confirm_payment')]]
         
         await query.edit_message_text(
             payment_text,
@@ -278,15 +278,15 @@ async def confirm_payment_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     
-    logger.info(f"💳 To'lov tasdiqlash: {query.from_user.id}")
+    logger.info(f"To'lov tasdiqlash: {query.from_user.id}")
     
     await query.edit_message_text(
-        "💸 To'lov qilgach, chekni (foto yoki fayl) shu yerga yuboring.\n\n"
+        "To'lov qilgach, chekni (foto yoki fayl) shu yerga yuboring.\n\n"
         "Chekda quyidagilar ko'rinishi kerak:\n"
         "• To'lov summasi\n"
         "• Vaqti\n"
         "• Karta raqami (oxirgi 4 ta raqam)\n\n"
-        "⚠️ Soxta chek yuborilgan holda hisob bloklanadi!"
+        "Soxta chek yuborilgan holda hisob bloklanadi!"
     )
     return PAYMENT_CONFIRM
 
@@ -294,7 +294,7 @@ async def handle_payment_receipt(update: Update, context: ContextTypes.DEFAULT_T
     """Chekni qabul qilish"""
     user_id = update.effective_user.id
     
-    logger.info(f"🧾 Chek qabul qilish: {user_id}")
+    logger.info(f"Chek qabul qilish: {user_id}")
     
     if not context.user_data.get('payment_data'):
         await update.message.reply_text("Iltimos, avval obuna tanlang.")
@@ -321,10 +321,10 @@ async def handle_payment_receipt(update: Update, context: ContextTypes.DEFAULT_T
         file_id
     )
     
-    logger.info(f"💸 To'lov qo'shildi: ID={payment_id}")
+    logger.info(f"To'lov qo'shildi: ID={payment_id}")
     
     if not payment_id:
-        await update.message.reply_text("❌ To'lov saqlashda xato yuz berdi.")
+        await update.message.reply_text("To'lov saqlashda xato yuz berdi.")
         return ConversationHandler.END
     
     # Adminlarga xabar berish
@@ -332,23 +332,23 @@ async def handle_payment_receipt(update: Update, context: ContextTypes.DEFAULT_T
     
     user = update.effective_user
     payment_info = f"""
-🔄 Yangi to'lov so'rovi:
+Yangi to'lov so'rovi:
 
-👤 Foydalanuvchi: @{user.username}
-🆔 ID: {user.id}
-📛 Ism: {user.full_name}
+Foydalanuvchi: @{user.username}
+ID: {user.id}
+Ism: {user.full_name}
 
-💰 Summa: {payment_data['amount']} so'm
-📅 Davomiylik: {payment_data['days']} kun
-🆔 To'lov ID: {payment_id}
+Summa: {payment_data['amount']} so'm
+Davomiylik: {payment_data['days']} kun
+To'lov ID: {payment_id}
 
 Tasdiqlaysizmi?
 """
     
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ Ha", callback_data=f"approve_{payment_id}"),
-            InlineKeyboardButton("❌ Yo'q", callback_data=f"reject_{payment_id}")
+            InlineKeyboardButton("Ha", callback_data=f"approve_{payment_id}"),
+            InlineKeyboardButton("Yo'q", callback_data=f"reject_{payment_id}")
         ]
     ])
     
@@ -370,13 +370,13 @@ Tasdiqlaysizmi?
                     reply_markup=keyboard
                 )
             sent_to_admins += 1
-            logger.info(f"📤 Admin xabari: {admin_id}")
+            logger.info(f"Admin xabari: {admin_id}")
         except Exception as e:
             logger.error(f"Adminga xabar yuborishda xato: {e}")
     
     await update.message.reply_text(
-        f"✅ Chek qabul qilindi. Admin tomonidan tekshirilmoqda.\n"
-        f"📤 {sent_to_admins} ta adminga xabar yuborildi."
+        f"Chek qabul qilindi. Admin tomonidan tekshirilmoqda.\n"
+        f"{sent_to_admins} ta adminga xabar yuborildi."
     )
     
     return ConversationHandler.END
@@ -394,7 +394,7 @@ async def payment_decision_callback(update: Update, context: ContextTypes.DEFAUL
     data = query.data
     action, payment_id = data.split('_')
     
-    logger.info(f"⚖️ To'lov qarori: {action} - ID={payment_id}")
+    logger.info(f"To'lov qarori: {action} - ID={payment_id}")
     
     # To'lovni topish
     with db.get_connection() as conn:
@@ -404,7 +404,7 @@ async def payment_decision_callback(update: Update, context: ContextTypes.DEFAUL
         payment = dict(row) if row else None
     
     if not payment:
-        await query.edit_message_text("❌ To'lov topilmadi.")
+        await query.edit_message_text("To'lov topilmadi.")
         return
     
     if action == 'approve':
@@ -416,15 +416,15 @@ async def payment_decision_callback(update: Update, context: ContextTypes.DEFAUL
         try:
             await context.bot.send_message(
                 chat_id=payment['user_id'],
-                text=f"✅ To'lovingiz tasdiqlandi!\n"
+                text=f"To'lovingiz tasdiqlandi!\n"
                      f"Obuna {payment['period_days']} kunga faollashtirildi.\n\n"
                      f"Endi kinolarni tomosha qilishingiz mumkin!"
             )
-            logger.info(f"✅ To'lov tasdiqlandi: {payment['user_id']}")
+            logger.info(f"To'lov tasdiqlandi: {payment['user_id']}")
         except Exception as e:
             logger.error(f"Foydalanuvchiga xabar yuborishda xato: {e}")
         
-        await query.edit_message_text(f"✅ To'lov tasdiqlandi. Foydalanuvchiga obuna berildi.")
+        await query.edit_message_text(f"To'lov tasdiqlandi. Foydalanuvchiga obuna berildi.")
     
     elif action == 'reject':
         db.update_payment_status(payment_id, 'rejected', user_id)
@@ -433,27 +433,27 @@ async def payment_decision_callback(update: Update, context: ContextTypes.DEFAUL
         try:
             await context.bot.send_message(
                 chat_id=payment['user_id'],
-                text="❌ To'lovingiz rad etildi.\n"
+                text="To'lovingiz rad etildi.\n"
                      "Sabab: Noto'g'ri chek yoki to'lov ma'lumotlari.\n\n"
                      "Iltimos, to'lovni qayta amalga oshiring va haqiqiy chek yuboring."
             )
-            logger.info(f"❌ To'lov rad etildi: {payment['user_id']}")
+            logger.info(f"To'lov rad etildi: {payment['user_id']}")
         except Exception as e:
             logger.error(f"Foydalanuvchiga xabar yuborishda xato: {e}")
         
-        await query.edit_message_text("❌ To'lov rad etildi. Foydalanuvchi ogohlantirildi.")
+        await query.edit_message_text("To'lov rad etildi. Foydalanuvchi ogohlantirildi.")
 
 # ========== ADMIN HANDLERLARI ==========
 async def add_movie_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino qo'shishni boshlash"""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Sizda ruxsat yo'q!")
+        await update.message.reply_text("Sizda ruxsat yo'q!")
         return
     
-    logger.info(f"🎬 Kino qo'shish boshlanmoqda: {update.effective_user.id}")
+    logger.info(f"Kino qo'shish boshlanmoqda: {update.effective_user.id}")
     
     await update.message.reply_text(
-        "🎬 Yangi kino qo'shish\n\n"
+        "Yangi kino qo'shish\n\n"
         "1. Avval kino faylini (video yoki dokument) yuboring:"
     )
     return ADD_MOVIE
@@ -466,11 +466,11 @@ async def add_movie_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.video:
         file_id = update.message.video.file_id
         file_type = 'video'
-        logger.info(f"📹 Video qabul qilindi: {file_id[:20]}...")
+        logger.info(f"Video qabul qilindi: {file_id[:20]}...")
     elif update.message.document:
         file_id = update.message.document.file_id
         file_type = 'document'
-        logger.info(f"📄 Fayl qabul qilindi: {file_id[:20]}...")
+        logger.info(f"Fayl qabul qilindi: {file_id[:20]}...")
     else:
         await update.message.reply_text("Iltimos, video yoki fayl yuboring.")
         return ADD_MOVIE
@@ -479,7 +479,7 @@ async def add_movie_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['file_type'] = file_type
     
     await update.message.reply_text(
-        "✅ Fayl qabul qilindi.\n"
+        "Fayl qabul qilindi.\n"
         "2. Endi kino nomini kiriting:"
     )
     return GET_TITLE
@@ -488,7 +488,7 @@ async def get_movie_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino nomini qabul qilish"""
     context.user_data['movie_title'] = update.message.text
     
-    logger.info(f"📝 Kino nomi: {update.message.text}")
+    logger.info(f"Kino nomi: {update.message.text}")
     
     await update.message.reply_text(
         "3. Kino sifati (HD, FullHD, 4K):"
@@ -499,7 +499,7 @@ async def get_movie_quality(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino sifati"""
     context.user_data['movie_quality'] = update.message.text
     
-    logger.info(f"📊 Kino sifati: {update.message.text}")
+    logger.info(f"Kino sifati: {update.message.text}")
     
     await update.message.reply_text(
         "4. Chiqarilgan yili:"
@@ -510,7 +510,7 @@ async def get_movie_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Chiqarilgan yili"""
     context.user_data['movie_year'] = update.message.text
     
-    logger.info(f"📅 Chiqarilgan yili: {update.message.text}")
+    logger.info(f"Chiqarilgan yili: {update.message.text}")
     
     await update.message.reply_text(
         "5. Tili:"
@@ -521,7 +521,7 @@ async def get_movie_language(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """Kino tili"""
     context.user_data['movie_language'] = update.message.text
     
-    logger.info(f"🌐 Kino tili: {update.message.text}")
+    logger.info(f"Kino tili: {update.message.text}")
     
     await update.message.reply_text(
         "6. Bahosi (masalan: 8.5/10):"
@@ -532,12 +532,12 @@ async def get_movie_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino bahosi va saqlash"""
     context.user_data['movie_rating'] = update.message.text
     
-    logger.info(f"⭐ Kino bahosi: {update.message.text}")
+    logger.info(f"Kino bahosi: {update.message.text}")
     
     # Kino kodini generatsiya qilish
     code = db.get_next_movie_code()
     
-    logger.info(f"🔢 Keyingi kino kodi: {code}")
+    logger.info(f"Keyingi kino kodi: {code}")
     
     # Bazaga saqlash
     success = db.add_movie(
@@ -555,15 +555,15 @@ async def get_movie_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if success:
         await update.message.reply_text(
-            f"✅ Kino muvaffaqiyatli qo'shildi!\n\n"
-            f"📁 Kodi: `{code}`\n"
-            f"🎬 Nomi: {context.user_data['movie_title']}\n"
-            f"📊 Sifati: {context.user_data['movie_quality']}"
+            f"Kino muvaffaqiyatli qo'shildi!\n\n"
+            f"Kodi: `{code}`\n"
+            f"Nomi: {context.user_data['movie_title']}\n"
+            f"Sifati: {context.user_data['movie_quality']}"
         )
-        logger.info(f"✅ Kino qo'shildi: {code} - {context.user_data['movie_title']}")
+        logger.info(f"Kino qo'shildi: {code} - {context.user_data['movie_title']}")
     else:
-        await update.message.reply_text("❌ Kino qo'shishda xato yuz berdi!")
-        logger.error(f"❌ Kino qo'shishda xato: {code}")
+        await update.message.reply_text("Kino qo'shishda xato yuz berdi!")
+        logger.error(f"Kino qo'shishda xato: {code}")
     
     # Contextni tozalash
     context.user_data.clear()
@@ -572,7 +572,7 @@ async def get_movie_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def delete_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino o'chirish"""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Sizda ruxsat yo'q!")
+        await update.message.reply_text("Sizda ruxsat yo'q!")
         return
     
     if not context.args:
@@ -580,17 +580,17 @@ async def delete_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     code = context.args[0]
-    logger.info(f"🗑️ Kino o'chirish: {code}")
+    logger.info(f"Kino o'chirish: {code}")
     
     if db.delete_movie(code):
-        await update.message.reply_text(f"✅ '{code}' kodli kino o'chirildi.")
+        await update.message.reply_text(f"'{code}' kodli kino o'chirildi.")
     else:
-        await update.message.reply_text(f"❌ '{code}' kodli kino topilmadi.")
+        await update.message.reply_text(f"'{code}' kodli kino topilmadi.")
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Xabar yuborish"""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Sizda ruxsat yo'q!")
+        await update.message.reply_text("Sizda ruxsat yo'q!")
         return
     
     if not context.args:
@@ -609,7 +609,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif update.message.reply_to_message.caption:
             message = update.message.reply_to_message.caption
     
-    logger.info(f"📢 Broadcast xabari: {message[:50]}...")
+    logger.info(f"Broadcast xabari: {message[:50]}...")
     
     # Barcha foydalanuvchilarga yuborish
     with db.get_connection() as conn:
@@ -624,7 +624,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(
                 chat_id=user['user_id'],
-                text=f"📢 **Admin xabari:**\n\n{message}"
+                text=f"Admin xabari:\n\n{message}"
             )
             sent += 1
         except Exception as e:
@@ -632,19 +632,19 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             failed += 1
     
     await update.message.reply_text(
-        f"📊 Xabar yuborildi:\n"
-        f"✅ Muvaffaqiyatli: {sent}\n"
-        f"❌ Xatolik: {failed}"
+        f"Xabar yuborildi:\n"
+        f"Muvaffaqiyatli: {sent}\n"
+        f"Xatolik: {failed}"
     )
-    logger.info(f"📊 Broadcast natijasi: {sent}✅, {failed}❌")
+    logger.info(f"Broadcast natijasi: {sent} muvaffaqiyatli, {failed} xatolik")
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Statistika"""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Sizda ruxsat yo'q!")
+        await update.message.reply_text("Sizda ruxsat yo'q!")
         return
     
-    logger.info(f"📊 Statistika so'rovi: {update.effective_user.id}")
+    logger.info(f"Statistika so'rovi: {update.effective_user.id}")
     
     stats_data = db.get_statistics()
     
@@ -654,20 +654,20 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.block_user(user_id)
     
     response = f"""
-📊 **Bot statistika:**
+Bot statistika:
 
-👥 Foydalanuvchilar:
-├ Faol obunachilar: {stats_data['active_subscribers']}
-├ Oddiy foydalanuvchilar: {stats_data['regular_users']}
-├ Bloklangan: {stats_data['blocked_users']}
-└ Jami: {stats_data['total_users']}
+Foydalanuvchilar:
+- Faol obunachilar: {stats_data['active_subscribers']}
+- Oddiy foydalanuvchilar: {stats_data['regular_users']}
+- Bloklangan: {stats_data['blocked_users']}
+- Jami: {stats_data['total_users']}
 
-🎬 Filmlar: {stats_data['total_movies']} ta
+Filmlar: {stats_data['total_movies']} ta
 
-📈 Faollik:
-└ Bugun faol: {stats_data['daily_active']} ta
+Faollik:
+- Bugun faol: {stats_data['daily_active']} ta
 
-🔄 Yangi bloklangan: {len(inactive_users)} ta foydalanuvchi
+Yangi bloklangan: {len(inactive_users)} ta foydalanuvchi
 """
     
     await update.message.reply_text(response)
@@ -675,18 +675,18 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin sozlamalari"""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Sizda ruxsat yo'q!")
+        await update.message.reply_text("Sizda ruxsat yo'q!")
         return
     
     keyboard = [
-        [InlineKeyboardButton("💰 Narxlarni sozlash", callback_data='set_prices')],
-        [InlineKeyboardButton("💳 Karta ma'lumotlari", callback_data='set_card')],
-        [InlineKeyboardButton("👥 Admin qo'shish", callback_data='add_admin')],
-        [InlineKeyboardButton("🗄️ Baza holati", callback_data='db_status')],
+        [InlineKeyboardButton("Narxlarni sozlash", callback_data='set_prices')],
+        [InlineKeyboardButton("Karta ma'lumotlari", callback_data='set_card')],
+        [InlineKeyboardButton("Admin qo'shish", callback_data='add_admin')],
+        [InlineKeyboardButton("Baza holati", callback_data='db_status')],
     ]
     
     await update.message.reply_text(
-        "⚙️ **Admin sozlamalari**",
+        "Admin sozlamalari",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -697,14 +697,14 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = query.from_user.id
     if not is_admin(user_id):
-        await query.answer("❌ Ruxsat yo'q!", show_alert=True)
+        await query.answer("Ruxsat yo'q!", show_alert=True)
         return
     
     data = query.data
     
     if data == 'set_prices':
         current_prices = f"""
-💰 **Joriy narxlar:**
+Joriy narxlar:
 
 1 oylik: {db.get_setting('monthly_price') or '29900'} so'm
 3 oylik: {db.get_setting('quarterly_price') or '79900'} so'm
@@ -712,7 +712,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 12 oylik: {db.get_setting('annual_price') or '279900'} so'm
 
 Yangi narxni quyidagi formatda yuboring:
-`oylik_narx;3_oylik_narx;6_oylik_narx;12_oylik_narx`
+oylik_narx;3_oylik_narx;6_oylik_narx;12_oylik_narx
 
 Masalan: 29900;79900;149900;279900
 """
@@ -721,13 +721,13 @@ Masalan: 29900;79900;149900;279900
     
     elif data == 'set_card':
         current_card = f"""
-💳 **Joriy karta ma'lumotlari:**
+Joriy karta ma'lumotlari:
 
 Karta raqami: {db.get_setting('card_number') or '8600 1234 5678 9012'}
 Karta egasi: {db.get_setting('card_holder') or 'SOLEJON ADASHOV ISROILOVICH'}
 
 Yangi ma'lumotlarni quyidagi formatda yuboring:
-`karta_raqami;karta_egasi`
+karta_raqami;karta_egasi
 
 Masalan: 8600 1234 5678 9012;SOLEJON ADASHOV ISROILOVICH
 """
@@ -748,24 +748,24 @@ Masalan: 8600 1234 5678 9012;SOLEJON ADASHOV ISROILOVICH
             tables_info = ""
             table_counts = db.get_table_counts()
             for table, count in table_counts.items():
-                tables_info += f"├ {table}: {count} ta\n"
+                tables_info += f"- {table}: {count} ta\n"
             
             response = f"""
-🗄️ **Baza holati:**
+Baza holati:
 
-✅ Baza mavjud
-📁 Fayl yo'li: {db_info['path']}
-💾 Hajmi: {db_info['size']:,} bayt
+Baza mavjud
+Fayl yo'li: {db_info['path']}
+Hajmi: {db_info['size']:,} bayt
 
-📊 Jadval ma'lumotlari:
+Jadval ma'lumotlari:
 {tables_info}
 """
         else:
             response = f"""
-❌ **Baza holati:**
+Baza holati:
 
-⚠️ Baza fayli topilmadi!
-📁 Fayl yo'li: {db_info['path']}
+Baza fayli topilmadi!
+Fayl yo'li: {db_info['path']}
 """
         
         await query.edit_message_text(response)
@@ -775,7 +775,7 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = update.effective_user.id
     text = update.message.text
     
-    logger.info(f"⚙️ Sozlama kiritildi: {text[:50]}...")
+    logger.info(f"Sozlama kiritildi: {text[:50]}...")
     
     if not context.user_data.get('waiting_for'):
         return
@@ -793,10 +793,10 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
             db.update_setting('semiannual_price', prices[2])
             db.update_setting('annual_price', prices[3])
             
-            await update.message.reply_text("✅ Narxlar yangilandi!")
-            logger.info(f"💰 Narxlar yangilandi: {prices}")
+            await update.message.reply_text("Narxlar yangilandi!")
+            logger.info(f"Narxlar yangilandi: {prices}")
         except:
-            await update.message.reply_text("❌ Noto'g'ri format!")
+            await update.message.reply_text("Noto'g'ri format!")
     
     elif waiting_for == 'card':
         try:
@@ -807,19 +807,19 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
             db.update_setting('card_number', card_data[0].strip())
             db.update_setting('card_holder', card_data[1].strip())
             
-            await update.message.reply_text("✅ Karta ma'lumotlari yangilandi!")
-            logger.info(f"💳 Karta ma'lumotlari yangilandi")
+            await update.message.reply_text("Karta ma'lumotlari yangilandi!")
+            logger.info(f"Karta ma'lumotlari yangilandi")
         except:
-            await update.message.reply_text("❌ Noto'g'ri format!")
+            await update.message.reply_text("Noto'g'ri format!")
     
     elif waiting_for == 'admin_id':
         try:
             admin_id = int(text.strip())
             db.add_admin(admin_id, user_id)
-            await update.message.reply_text(f"✅ {admin_id} admin sifatida qo'shildi!")
-            logger.info(f"👥 Yangi admin: {admin_id}")
+            await update.message.reply_text(f"{admin_id} admin sifatida qo'shildi!")
+            logger.info(f"Yangi admin: {admin_id}")
         except:
-            await update.message.reply_text("❌ Noto'g'ri ID!")
+            await update.message.reply_text("Noto'g'ri ID!")
     
     context.user_data.clear()
 
@@ -827,7 +827,7 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
 async def db_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Baza holatini tekshirish (komanda)"""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Sizda ruxsat yo'q!")
+        await update.message.reply_text("Sizda ruxsat yo'q!")
         return
     
     db_info = db.get_db_info()
@@ -844,27 +844,27 @@ async def db_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 table_name = table[0]
                 cursor.execute(f'SELECT COUNT(*) FROM {table_name}')
                 count = cursor.fetchone()[0]
-                tables_info += f"├ {table_name}: {count} ta\n"
+                tables_info += f"- {table_name}: {count} ta\n"
         
         response = f"""
-✅ **Baza ishlayapti**
+Baza ishlayapti
 
-📁 Fayl yo'li: {db_info['path']}
-💾 Hajmi: {db_info['size']:,} bayt
+Fayl yo'li: {db_info['path']}
+Hajmi: {db_info['size']:,} bayt
 
-📊 Jadval ma'lumotlari:
+Jadval ma'lumotlari:
 {tables_info}
 
-🔗 Ulanish testi: {'✅ Muvaffaqiyatli' if db.test_connection() else '❌ Xatolik'}
+Ulanish testi: {'Muvaffaqiyatli' if db.test_connection() else 'Xatolik'}
 """
     else:
         response = f"""
-❌ **Baza topilmadi**
+Baza topilmadi
 
-📁 Fayl yo'li: {db_info['path']}
-⚠️ Baza fayli mavjud emas
+Fayl yo'li: {db_info['path']}
+Baza fayli mavjud emas
 
-💡 Yechimlar:
+Yechimlar:
 1. Botni qayta ishga tushiring
 2. /reset_db bilan bazani qayta yarating
 3. Fayl yo'lini tekshiring
@@ -875,44 +875,44 @@ async def db_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reset_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Bazani qayta yaratish"""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Sizda ruxsat yo'q!")
+        await update.message.reply_text("Sizda ruxsat yo'q!")
         return
     
-    logger.info("🗑️ Baza reset qilinmoqda...")
+    logger.info("Baza reset qilinmoqda...")
     
     try:
         # Eski faylni o'chirish
         if os.path.exists(db.db_path):
             os.remove(db.db_path)
-            logger.info(f"✅ Eski baza o'chirildi: {db.db_path}")
+            logger.info(f"Eski baza o'chirildi: {db.db_path}")
         
         # Yangi baza yaratish
         db.init_db()
         
         await update.message.reply_text(
-            f"✅ Baza qayta yaratildi!\n"
-            f"📁 Fayl yo'li: {db.db_path}\n\n"
+            f"Baza qayta yaratildi!\n"
+            f"Fayl yo'li: {db.db_path}\n\n"
             f"Endi /add bilan kino qo'shishni sinab ko'ring."
         )
-        logger.info("✅ Baza qayta yaratildi")
+        logger.info("Baza qayta yaratildi")
         
     except Exception as e:
-        await update.message.reply_text(f"❌ Baza reset qilishda xato: {str(e)}")
-        logger.error(f"❌ Baza reset qilishda xato: {e}")
+        await update.message.reply_text(f"Baza reset qilishda xato: {str(e)}")
+        logger.error(f"Baza reset qilishda xato: {e}")
 
 async def list_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Barcha kinolarni ro'yxatini chiqarish"""
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Sizda ruxsat yo'q!")
+        await update.message.reply_text("Sizda ruxsat yo'q!")
         return
     
     movies = db.get_all_movies()
     
     if not movies:
-        await update.message.reply_text("📭 Bazada hech qanday kino yo'q.")
+        await update.message.reply_text("Bazada hech qanday kino yo'q.")
         return
     
-    response = "🎬 **Barcha kinolar:**\n\n"
+    response = "Barcha kinolar:\n\n"
     for movie in movies:
         response += f"`{movie.get('code', '?')}` - {movie.get('name', 'Noma\'lum')}\n"
         if len(response) > 3000:  # Telegram xabar chegarasi
@@ -922,11 +922,11 @@ async def list_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if response:
         await update.message.reply_text(response)
     
-    logger.info(f"📋 {len(movies)} ta kino ro'yxati chiqarildi")
+    logger.info(f"{len(movies)} ta kino ro'yxati chiqarildi")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel command"""
-    await update.message.reply_text("❌ Operatsiya bekor qilindi.")
+    await update.message.reply_text("Operatsiya bekor qilindi.")
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -937,9 +937,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ========== ASOSIY FUNKSIYA ==========
 def main():
     """Botni ishga tushirish"""
-    print("🤖 Bot ishga tushmoqda...")
-    print(f"📁 DB yo'li: {db.db_path}")
-    print(f"🔑 Admin ID: {MAIN_ADMIN}")
+    print("Bot ishga tushmoqda...")
+    print(f"DB yo'li: {db.db_path}")
+    print(f"Admin ID: {MAIN_ADMIN}")
     
     # Bot yaratish
     application = Application.builder().token(BOT_TOKEN).build()
@@ -950,7 +950,7 @@ def main():
         states={
             ADD_MOVIE: [MessageHandler(filters.VIDEO | filters.Document.ALL, add_movie_file)],
             GET_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_title)],
-            GET_QUALITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_rating)],
+            GET_QUALITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_quality)],
             GET_YEAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_year)],
             GET_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_language)],
             GET_RATING: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_rating)],
@@ -990,7 +990,7 @@ def main():
     application.add_error_handler(error_handler)
     
     # Botni ishga tushirish
-    print("✅ Bot ishga tushdi...")
+    print("Bot ishga tushdi...")
     application.run_polling(
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True
