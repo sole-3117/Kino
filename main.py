@@ -99,8 +99,8 @@ Yili: {movie.get('year', 'Noma\'lum')}
 Tili: {movie.get('language', 'Noma\'lum')}
 Bahosi: {movie.get('rating', 'Noma\'lum')}
 
-Tavsif: {movie.get('description', 'Tavsif yo\'q')}
-"""
+Tavsif: {movie.get('description', 'Tavsif yo\'q')} 
+""" 
     return info
 
 # ========== ASOSIY HANDLERLAR ==========
