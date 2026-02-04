@@ -1,25 +1,26 @@
 import os
 import logging
+import asyncio
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 from telegram import (
-    Update,
-    InlineKeyboardButton,
+    Update, 
+    InlineKeyboardButton, 
     InlineKeyboardMarkup,
     ReplyKeyboardMarkup
 )
 from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
+    Application, 
+    CommandHandler, 
+    MessageHandler, 
     CallbackQueryHandler,
     ContextTypes,
     ConversationHandler,
     filters
 )
 
-from db import Database  # Sizning db.py faylingizdagi Database class
+from db import Database
 
 # .env faylini yuklash
 load_dotenv()
@@ -28,7 +29,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 MAIN_ADMIN = int(os.getenv('MAIN_ADMIN'))
 
-# DB yo'li
+# RENDER uchun DB yo'li
 if 'RENDER' in os.environ:
     DB_PATH = '/tmp/database.db'
     print("RENDER muhitida ishlayapman")
@@ -37,11 +38,12 @@ else:
     DB_PATH = 'database.db'
     print("Lokal muhitda ishlayapman")
 
+# Database obyekti
 db = Database(DB_PATH)
 
 # Conversation holatlari
 ADD_MOVIE, GET_TITLE, GET_QUALITY, GET_YEAR, GET_LANGUAGE, GET_RATING = range(6)
-PAYMENT_CONFIRM = 10  # Alohida qiymat - to'qnashuvni oldini olish uchun
+PAYMENT_CONFIRM = range(1)
 
 # Logging
 logging.basicConfig(
@@ -90,7 +92,7 @@ To'lov qilgach, chekni (foto yoki fayl) shu yerga yuboring.
 
 def format_movie_info(movie):
     """Kino ma'lumotlarini chiroyli formatlash"""
-    info = rf"""
+    info = f"""
 {movie.get('name', 'Noma\'lum')}
 
 Kodi: `{movie.get('code', 'Noma\'lum')}`
@@ -99,8 +101,8 @@ Yili: {movie.get('year', 'Noma\'lum')}
 Tili: {movie.get('language', 'Noma\'lum')}
 Bahosi: {movie.get('rating', 'Noma\'lum')}
 
-Tavsif: {movie.get('description', 'Tavsif yo\'q')} 
-""" 
+Tavsif: {movie.get('description', 'Tavsif yo\'q')}
+"""
     return info
 
 # ========== ASOSIY HANDLERLAR ==========
@@ -199,7 +201,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             logger.info(f"Kino topilmadi: {text}")
             await update.message.reply_text("Bunday kodli kino topilmadi.")
-    # Agar setting input kutilyotgan bo'lsa, uni qayta ishlash uchun alohida handler bor
 
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino qidirish"""
@@ -393,16 +394,17 @@ async def payment_decision_callback(update: Update, context: ContextTypes.DEFAUL
         return
     
     data = query.data
-    try:
-        action, payment_id = data.split('_', 1)
-    except ValueError:
-        await query.answer("Noto'g'ri data!", show_alert=True)
-        return
+    action, payment_id = data.split('_')
     
     logger.info(f"To'lov qarori: {action} - ID={payment_id}")
     
     # To'lovni topish
-    payment = db.get_payment(payment_id)
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM payments WHERE id = ?', (payment_id,))
+        row = cursor.fetchone()
+        payment = dict(row) if row else None
+    
     if not payment:
         await query.edit_message_text("To'lov topilmadi.")
         return
@@ -448,7 +450,7 @@ async def add_movie_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino qo'shishni boshlash"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("Sizda ruxsat yo'q!")
-        return ConversationHandler.END
+        return
     
     logger.info(f"Kino qo'shish boshlanmoqda: {update.effective_user.id}")
     
@@ -612,7 +614,10 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Broadcast xabari: {message[:50]}...")
     
     # Barcha foydalanuvchilarga yuborish
-    users = db.get_all_users(blocked=False)
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT user_id FROM users WHERE is_blocked = 0')
+        users = cursor.fetchall()
     
     sent = 0
     failed = 0
@@ -776,15 +781,16 @@ Fayl yo'li: {db_info['path']}
         await query.edit_message_text(response)
 
 async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sozlamalar inputini qabul qilish — faqat admin va waiting_for bo'lsa ishlaydi"""
+    """Sozlamalar inputini qabul qilish"""
     user_id = update.effective_user.id
     text = update.message.text
     
-    if not is_admin(user_id) or not context.user_data.get('waiting_for'):
-        return  # Oddiy foydalanuvchilar uchun hech narsa qilmasin
+    logger.info(f"Sozlama kiritildi: {text[:50]}...")
+    
+    if not context.user_data.get('waiting_for'):
+        return
     
     waiting_for = context.user_data['waiting_for']
-    logger.info(f"Sozlama kiritildi: {text[:50]}...")
     
     if waiting_for == 'prices':
         try:
@@ -792,15 +798,15 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
             if len(prices) != 4:
                 raise ValueError
             
-            db.update_setting('monthly_price', prices[0].strip())
-            db.update_setting('quarterly_price', prices[1].strip())
-            db.update_setting('semiannual_price', prices[2].strip())
-            db.update_setting('annual_price', prices[3].strip())
+            db.update_setting('monthly_price', prices[0])
+            db.update_setting('quarterly_price', prices[1])
+            db.update_setting('semiannual_price', prices[2])
+            db.update_setting('annual_price', prices[3])
             
             await update.message.reply_text("Narxlar yangilandi!")
             logger.info(f"Narxlar yangilandi: {prices}")
-        except ValueError:
-            await update.message.reply_text("Noto'g'ri format! Masalan: 29900;79900;149900;279900")
+        except:
+            await update.message.reply_text("Noto'g'ri format!")
     
     elif waiting_for == 'card':
         try:
@@ -813,8 +819,8 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
             
             await update.message.reply_text("Karta ma'lumotlari yangilandi!")
             logger.info(f"Karta ma'lumotlari yangilandi")
-        except ValueError:
-            await update.message.reply_text("Noto'g'ri format! Masalan: 8600 1234 5678 9012;SOLEJON ADASHOV ISROILOVICH")
+        except:
+            await update.message.reply_text("Noto'g'ri format!")
     
     elif waiting_for == 'admin_id':
         try:
@@ -822,8 +828,8 @@ async def handle_settings_input(update: Update, context: ContextTypes.DEFAULT_TY
             db.add_admin(admin_id, user_id)
             await update.message.reply_text(f"{admin_id} admin sifatida qo'shildi!")
             logger.info(f"Yangi admin: {admin_id}")
-        except ValueError:
-            await update.message.reply_text("Noto'g'ri ID! Faqat raqam kiriting.")
+        except:
+            await update.message.reply_text("Noto'g'ri ID!")
     
     context.user_data.clear()
 
@@ -838,8 +844,17 @@ async def db_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if db_info['exists']:
         # Jadval sonlarini olish
-        table_counts = db.get_table_counts()
-        tables_info = "\n".join(f"- {table}: {count} ta" for table, count in table_counts.items())
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = cursor.fetchall()
+            
+            tables_info = ""
+            for table in tables:
+                table_name = table[0]
+                cursor.execute(f'SELECT COUNT(*) FROM {table_name}')
+                count = cursor.fetchone()[0]
+                tables_info += f"- {table_name}: {count} ta\n"
         
         response = f"""
 Baza ishlayapti
@@ -877,16 +892,16 @@ async def reset_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Eski faylni o'chirish
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
-            logger.info(f"Eski baza o'chirildi: {DB_PATH}")
+        if os.path.exists(db.db_path):
+            os.remove(db.db_path)
+            logger.info(f"Eski baza o'chirildi: {db.db_path}")
         
         # Yangi baza yaratish
         db.init_db()
         
         await update.message.reply_text(
             f"Baza qayta yaratildi!\n"
-            f"Fayl yo'li: {DB_PATH}\n\n"
+            f"Fayl yo'li: {db.db_path}\n\n"
             f"Endi /add bilan kino qo'shishni sinab ko'ring."
         )
         logger.info("Baza qayta yaratildi")
@@ -910,12 +925,12 @@ async def list_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     response = "Barcha kinolar:\n\n"
     for movie in movies:
         response += f"`{movie.get('code', '?')}` - {movie.get('name', 'Noma\'lum')}\n"
-        if len(response) > 3000:  # Telegram limit
-            await update.message.reply_text(response, parse_mode='Markdown')
+        if len(response) > 3000:  # Telegram xabar chegarasi
+            await update.message.reply_text(response)
             response = ""
     
     if response:
-        await update.message.reply_text(response, parse_mode='Markdown')
+        await update.message.reply_text(response)
     
     logger.info(f"{len(movies)} ta kino ro'yxati chiqarildi")
 
@@ -933,7 +948,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Botni ishga tushirish"""
     print("Bot ishga tushmoqda...")
-    print("DB yo'li:", DB_PATH)
+    print("DB yo'li:", db.db_path)
     print("Admin ID:", MAIN_ADMIN)
     
     # Bot yaratish
@@ -979,10 +994,7 @@ def main():
     application.add_handler(CallbackQueryHandler(payment_decision_callback, pattern='^(approve|reject)_'))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern='^(set_prices|set_card|add_admin|db_status)$'))
     
-    # Asosiy message handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # Settings input handler — eng oxirida, faqat kerak bo'lganda
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settings_input))
     
     application.add_error_handler(error_handler)
