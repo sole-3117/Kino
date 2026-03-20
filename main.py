@@ -14,7 +14,7 @@ import db
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-MAIN_ADMIN = int(os.getenv("MAIN_ADMIN"sole_3117))
+MAIN_ADMIN = int(os.getenv("MAIN_ADMIN"))
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
