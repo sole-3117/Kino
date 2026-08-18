@@ -25,6 +25,24 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import db
 import backup_restore
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# Render portini aldash uchun mini web server
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Kino Bot is running!")
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+# Alohida oqimda (thread) ishga tushirish
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
