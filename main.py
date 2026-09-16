@@ -705,7 +705,7 @@ def main():
     app.add_handler(MessageHandler(filters.VIDEO & filters.CaptionRegex("#KINO_SYNC"), sync_recv))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
 
-    print("Kino Bot v2.0 to'liq kuch bilan ishga tushdi...")
+    print("Kino Bot v2.9 to'liq kuch bilan ishga tushdi...")
     app.run_polling()
 
 if __name__ == "__main__":
